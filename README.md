@@ -312,7 +312,7 @@ Estas habilidades se aplican igual en **Go, Rust, Node, Java, Python:**
 
 ### Comunidades
 - [r/softwarearchitecture](https://reddit.com/r/softwarearchitecture)
-- [Software Architecture Discord](https://discord.gg/software-architecture)
+
 
 ---
 
