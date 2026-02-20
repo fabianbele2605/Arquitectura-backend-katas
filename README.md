@@ -4,6 +4,14 @@
 
 **Duración total:** 18-26 semanas | **Nivel:** Intermedio a Avanzado
 
+![Progress](https://img.shields.io/badge/Progress-50%25-yellow)
+![Katas](https://img.shields.io/badge/Katas-4%2F8-blue)
+![License](https://img.shields.io/badge/License-MIT-green)
+![Node](https://img.shields.io/badge/Node.js-18+-brightgreen)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16+-blue)
+![Redis](https://img.shields.io/badge/Redis-7+-red)
+
+
 ---
 
 ## 📋 Tabla de Contenidos
