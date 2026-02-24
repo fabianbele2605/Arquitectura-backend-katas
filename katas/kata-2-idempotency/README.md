@@ -1,194 +1,93 @@
-# Kata 2: Idempotencia y Deduplicación
+# Kata 2: Idempotencia
 
-## 🎯 Objetivo
+## Objetivo
 
-Entender:
-- Idempotency-Key para evitar duplicados
-- Deduplicación de requests
-- Manejo de reintentos
-- Race conditions en idempotencia
+Implementar idempotencia usando `Idempotency-Key` header para prevenir procesamiento duplicado de pagos.
 
-## 📁 Estructura
+## Conceptos Clave
+
+- **Idempotency-Key**: identificador único por request
+- **Deduplicación**: detectar y rechazar duplicados
+- **Race Condition**: múltiples requests simultáneos con misma key
+- **UNIQUE Constraint**: garantía a nivel DB
+
+## Arquitectura
 
 ```
-kata-2-idempotency/
-├── sql/
-│   └── schema.sql         # Tablas: payments + idempotency_keys
-├── node/
-│   ├── package.json
-│   └── server.js          # Servidor con idempotencia
-└── docs/
-    └── analisis.md        # Experimentos y conclusiones
+Cliente → POST /pay (Idempotency-Key: abc123)
+            ↓
+         [Verificar key en DB]
+            ↓
+         ¿Existe? → Retornar respuesta cacheada
+            ↓ No
+         [Procesar pago]
+            ↓
+         [Guardar key + respuesta]
 ```
 
-## 🚀 Cómo ejecutar
+## Setup
 
-### 1. Crear base de datos
+### 1. Base de Datos
 
 ```bash
-sudo -u postgres psql
-CREATE DATABASE idempotency_db;
-CREATE USER idempotency_user WITH PASSWORD 'idempotency_pass';
-GRANT ALL PRIVILEGES ON DATABASE idempotency_db TO idempotency_user;
-\c idempotency_db
-GRANT ALL ON SCHEMA public TO idempotency_user;
-\q
+createdb idempotency_db
+createuser idem_user -P  # password: idem_pass
+psql idempotency_db < sql/schema.sql
 ```
 
-### 2. Ejecutar schema
+### 2. Iniciar Servidor
 
 ```bash
-psql -U idempotency_user -d idempotency_db -h localhost -f sql/schema.sql
-```
-
-### 3. Instalar dependencias
-
-```bash
-cd node
 npm install
-```
-
-### 4. Iniciar servidor
-
-```bash
 node server.js
 ```
 
-## 🧪 Pruebas
+## Experimentos
 
-### Crear pago (primera vez)
-
-```bash
-curl -X POST http://localhost:3000/pay \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: pago-001" \
-  -d '{"amount": 100, "description": "Compra de laptop"}'
-```
-
-### Reintentar (mismo key)
+### Experimento 1: Request Normal
 
 ```bash
 curl -X POST http://localhost:3000/pay \
   -H "Content-Type: application/json" \
-  -H "Idempotency-Key: pago-001" \
-  -d '{"amount": 100, "description": "Compra de laptop"}'
+  -H "Idempotency-Key: key-001" \
+  -d '{"amount": 100, "userId": 1}'
 ```
 
-**Resultado:** Devuelve respuesta guardada (NO procesa de nuevo)
+**Resultado esperado:**
+- Status: `200 OK`
+- Pago procesado
 
-### Test de concurrencia (10 requests simultáneos)
+### Experimento 2: Request Duplicado
 
 ```bash
-for i in {1..10}; do
-  curl -X POST http://localhost:3000/pay \
-    -H "Content-Type: application/json" \
-    -H "Idempotency-Key: pago-002" \
-    -d '{"amount": 50, "description": "Mouse"}' &
-done
-wait
+# Mismo Idempotency-Key
+curl -X POST http://localhost:3000/pay \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: key-001" \
+  -d '{"amount": 100, "userId": 1}'
 ```
 
-**Resultado:** Solo 1 pago creado
+**Resultado esperado:**
+- Status: `200 OK`
+- Respuesta cacheada (no se procesa de nuevo)
 
-### Consultar pagos
+### Experimento 3: Race Condition
 
 ```bash
-curl http://localhost:3000/payments
+# Enviar 2 requests simultáneos
+curl -X POST http://localhost:3000/pay \
+  -H "Idempotency-Key: key-race" \
+  -d '{"amount": 50, "userId": 2}' &
+curl -X POST http://localhost:3000/pay \
+  -H "Idempotency-Key: key-race" \
+  -d '{"amount": 50, "userId": 2}' &
 ```
 
-### Ver keys guardadas
+**Resultado esperado:**
+- Solo 1 request procesa
+- El otro recibe respuesta cacheada
+- UNIQUE constraint previene duplicados
 
-```bash
-curl http://localhost:3000/idempotency-keys
-```
+## Conclusiones
 
-## 📊 Resultados esperados
-
-| Experimento | Resultado |
-|-------------|-----------|
-| Primera vez con key única | ✅ Procesa y guarda |
-| Reintento con mismo key | ✅ Devuelve guardado (no procesa) |
-| 10 requests simultáneos | ✅ Solo 1 pago creado |
-| Sin Idempotency-Key | ❌ Error 400 |
-
-## 🧠 Conceptos clave
-
-### Idempotency-Key
-
-Header HTTP que identifica una operación única:
-```
-Idempotency-Key: abc-123-xyz
-```
-
-- Generado por el cliente
-- Mismo key = misma operación
-- Key diferente = operación diferente
-
-### Flujo
-
-```
-1. Cliente envía request + Idempotency-Key
-2. Servidor busca: ¿Ya procesé esta key?
-   - SÍ → Devuelve respuesta guardada
-   - NO → Procesa + Guarda + Responde
-```
-
-### Tabla de deduplicación
-
-```sql
-CREATE TABLE idempotency_keys (
-    idempotency_key VARCHAR(255) UNIQUE,
-    request_body JSONB,
-    response_body JSONB,
-    response_status INTEGER
-);
-```
-
-Guarda:
-- La key (UNIQUE)
-- Lo que pidió el cliente
-- Lo que respondimos
-- El código HTTP
-
-### Race conditions
-
-Cuando múltiples requests llegan simultáneamente:
-```
-Request 1: ¿Existe key? NO → Procesa
-Request 2: ¿Existe key? NO → Intenta procesar
-  ↓
-UNIQUE constraint violation
-  ↓
-Request 2 espera y reintenta lectura
-  ↓
-Devuelve resultado de Request 1
-```
-
-## ✅ Checklist
-
-- [ ] Entender qué es idempotencia
-- [ ] Implementar Idempotency-Key
-- [ ] Crear tabla de deduplicación
-- [ ] Manejar reintentos
-- [ ] Observar race conditions
-- [ ] Implementar manejo de duplicados
-
-## 🎯 Casos de uso reales
-
-### 1. Pagos
-Usuario hace doble clic → Solo 1 cargo
-
-### 2. Órdenes
-Timeout en red → Cliente reintenta → Solo 1 orden
-
-### 3. APIs con retry
-API Gateway reintenta automáticamente → No duplica
-
-## 🚀 Siguiente paso
-
-**Kata 3: Message Queues + Workers**
-
-Combinarás:
-- Transacciones (Kata 1)
-- Idempotencia (Kata 2)
-- Procesamiento asíncrono (Kata 3)
+Ver `docs/analisis.md` para análisis detallado.

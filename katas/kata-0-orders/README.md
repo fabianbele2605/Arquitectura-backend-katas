@@ -1,166 +1,93 @@
-# Kata 0: Mini Servicio Orders (Estado en Memoria)
+# Kata 0: Estado en Memoria y Race Conditions
 
-## 🎯 Objetivo
+## Objetivo
 
-Entender los conceptos fundamentales de:
-- Estado en memoria (volátil)
-- Efectos secundarios
-- Stateful vs Stateless
-- Concurrencia vs Paralelismo
-- Race conditions y Mutex
+Entender race conditions y cómo prevenirlas usando mutex en sistemas concurrentes.
 
-## 📁 Estructura
+## Conceptos Clave
 
-```
-kata-0-orders/
-├── node/
-│   ├── package.json
-│   └── server.js          # Implementación en Node.js
-├── go/
-│   ├── go.mod
-│   ├── main.go            # Implementación en Go (con mutex)
-│   └── main-broken.go     # Versión sin mutex (para demostrar bug)
-└── docs/
-    └── analisis.md        # Documentación y experimentos
-```
+- **Estado en memoria**: datos volátiles (se pierden al reiniciar)
+- **Race condition**: múltiples threads acceden a estado compartido
+- **Mutex**: lock para sincronizar acceso
+- **Concurrencia**: Node.js (single-thread) vs Go (multi-thread)
 
-## 🚀 Cómo ejecutar
+## Implementaciones
 
-### Node.js
+### Node.js (server.js)
+
 ```bash
-cd node
+npm install
 node server.js
-# Escucha en http://localhost:3000
 ```
 
-### Go (versión correcta)
+**Características:**
+- Single-threaded (event loop)
+- No necesita mutex
+- Race conditions solo con async I/O
+
+### Go (main.go)
+
 ```bash
-cd go
 go run main.go
-# Escucha en http://localhost:3001
 ```
 
-### Go (versión con bug)
+**Características:**
+- Multi-threaded (goroutines)
+- Necesita mutex para estado compartido
+- Race conditions con acceso concurrente
+
+## Experimentos
+
+### Experimento 1: 100 Requests Concurrentes (Sin Mutex)
+
 ```bash
-cd go
+# Go
 go run main-broken.go
-# Escucha en http://localhost:3001
-# ⚠️ ADVERTENCIA: Tiene race conditions intencionales
-```
 
-## 🧪 Pruebas
-
-### Crear una orden
-```bash
-curl -X POST http://localhost:3000/orders \
-  -H "Content-Type: application/json" \
-  -d '{"product": "Laptop", "quantity": 1, "price": 1200}'
-```
-
-### Consultar órdenes
-```bash
-curl http://localhost:3000/orders
-```
-
-### Test de concurrencia (100 requests)
-```bash
+# En otra terminal
 for i in {1..100}; do
-  curl -X POST http://localhost:3001/orders \
+  curl -X POST http://localhost:8080/orders \
     -H "Content-Type: application/json" \
-    -d "{\"product\": \"Item$i\", \"quantity\": 1, \"price\": 10}" &
+    -d '{"customerId": 1, "amount": 100}' &
 done
 wait
 
-# Verificar cantidad
-curl http://localhost:3001/orders | jq 'length'
-
-# Buscar IDs duplicados
-curl http://localhost:3001/orders | jq '.[].id' | sort | uniq -d
+curl http://localhost:8080/orders
 ```
 
-## 📊 Resultados esperados
+**Resultado esperado:**
+- Solo 99/100 órdenes guardadas
+- Race condition: múltiples goroutines escriben simultáneamente
 
-| Implementación | 100 requests | Race condition | Datos perdidos |
-|----------------|--------------|----------------|----------------|
-| Node.js | 100 ✅ | No (single-thread) | No |
-| Go sin mutex | 99 ❌ | Sí | Sí (1 orden) |
-| Go con mutex | 100 ✅ | No (sincronizado) | No |
+### Experimento 2: 100 Requests Concurrentes (Con Mutex)
 
-## 🧠 Conceptos clave
+```bash
+# Go
+go run main.go
 
-### Estado en memoria
-- **Ventaja:** Rápido (acceso directo a RAM)
-- **Desventaja:** Volátil (se pierde al reiniciar)
-- **Uso:** Cache, sesiones temporales, rate limiting
+# Repetir test
+for i in {1..100}; do
+  curl -X POST http://localhost:8080/orders \
+    -d '{"customerId": 1, "amount": 100}' &
+done
+wait
 
-### Efectos secundarios
-Modificaciones que NO se pueden deshacer:
-- Incrementar ID
-- Agregar a array
-- Generar timestamp
-- Modificar estado global
-
-### Race condition
-**Problema:** Múltiples threads acceden al mismo dato sin sincronización
-
-**Ejemplo en Go sin mutex:**
-```
-Thread 1: Lee nextID = 5
-Thread 2: Lee nextID = 5  ← ¡Mismo valor!
-Thread 1: Crea orden ID=5
-Thread 2: Crea orden ID=5  ← ¡Duplicado!
+curl http://localhost:8080/orders
 ```
 
-**Resultado:** Datos corruptos o perdidos
+**Resultado esperado:**
+- 100/100 órdenes guardadas
+- Mutex previene race condition
 
-### Mutex (Mutual Exclusion)
-**Solución:** Sincronizar acceso a sección crítica
-
-```go
-mu.Lock()
-// Solo UNA goroutine puede estar aquí
-newOrder := Order{ID: nextID, ...}
-nextID++
-orders = append(orders, newOrder)
-mu.Unlock()
-```
-
-### Node.js vs Go
+## Diferencias Node.js vs Go
 
 | Aspecto | Node.js | Go |
 |---------|---------|-----|
-| **Modelo** | Single-threaded | Multi-threaded |
-| **Concurrencia** | Event loop | Goroutines |
-| **Paralelismo** | No (un core) | Sí (múltiples cores) |
-| **Race conditions** | No | Sí (sin mutex) |
-| **Mutex necesario** | No | Sí |
+| Modelo | Single-thread | Multi-thread |
+| Mutex | No necesario | Necesario |
+| Race Condition | Raro | Común |
+| Concurrencia | Event loop | Goroutines |
 
-## 📚 Documentación completa
+## Conclusiones
 
-Ver `docs/analisis.md` para:
-- Experimentos realizados
-- Comparación Node vs Go
-- Análisis detallado de race conditions
-- Conclusiones y aprendizajes
-
-## ✅ Checklist de aprendizaje
-
-Después de completar esta kata deberías poder:
-
-- [ ] Explicar qué es estado en memoria
-- [ ] Identificar efectos secundarios en código
-- [ ] Diferenciar stateful vs stateless
-- [ ] Explicar concurrencia vs paralelismo
-- [ ] Reconocer race conditions
-- [ ] Usar mutex para proteger estado compartido
-- [ ] Comparar modelos de concurrencia (Node vs Go)
-
-## 🚀 Siguiente paso
-
-**Kata 1: Persistencia con PostgreSQL**
-
-Aprenderás:
-- Guardar datos en base de datos
-- Transacciones ACID
-- Rollback en caso de error
-- Unique constraints para evitar duplicados
+Ver `docs/analisis.md` para análisis detallado de race conditions.
