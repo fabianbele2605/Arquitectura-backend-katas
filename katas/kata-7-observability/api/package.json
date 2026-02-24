@@ -1,0 +1,10 @@
+{
+  "name": "observability-api",
+  "version": "1.0.0",
+  "main": "server.js",
+  "dependencies": {
+    "express": "^4.18.2",
+    "redis": "^4.6.0",
+    "uuid": "^9.0.0"
+  }
+}

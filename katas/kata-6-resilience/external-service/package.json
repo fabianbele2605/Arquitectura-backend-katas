@@ -1,0 +1,8 @@
+{
+  "name": "payment-api",
+  "version": "1.0.0",
+  "main": "payment-api.js",
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "observability-worker",
+  "version": "1.0.0",
+  "main": "worker.js",
+  "dependencies": {
+    "redis": "^4.6.0"
+  }
+}
